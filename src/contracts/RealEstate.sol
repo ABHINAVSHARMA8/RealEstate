@@ -83,8 +83,8 @@ contract RealEstate is ERC20{
     );
     
     
-    mapping(address=>uint[]) prop_balance;
-    mapping(address=>uint[]) prop_time;
+    mapping(address=>mapping(uint=>uint)) prop_balance; //address -prop id - balance
+    mapping(address=>mapping(uint=>uint)) prop_time; //address - prop id - time
     mapping(uint=>Property) prop_list;
 
     modifier notOwner(uint id) {
@@ -98,15 +98,15 @@ contract RealEstate is ERC20{
     constructor(uint properties)  ERC20("Property","PPT"){
         
 
-        for(uint i=0;i<properties;i++){
+       for(uint i=0;i<properties;i++){
 
-            Property memory p = Property(i,msg.sender,(i+1),false);
+            Property memory p = Property(i,msg.sender,(i+1)*10,false);
 
             prop_list[i]=p;
 
-            _mint(msg.sender,p.price*10**18);
+            _mint(msg.sender,10);
 
-            prop_balance[msg.sender][i]=p.price*10**18;
+            prop_balance[msg.sender][i]=10;
 
 
             emit PropertyCreated(p.id,p.owner,p.price,balanceOf(msg.sender),false);
@@ -114,14 +114,14 @@ contract RealEstate is ERC20{
         }
     }
 
-    function get_property(uint id) public returns(uint){
+  /*  function get_property(uint id) public {
 
         Property memory p = prop_list[id];
 
         emit PropertyCreated(id,p.owner,p.price, balanceOf(p.owner),false);
 
-        return p.price;
-    }
+        
+    }*/
 
     function buy(uint id) public payable notOwner(id){
 
@@ -141,10 +141,11 @@ contract RealEstate is ERC20{
 
         prop_balance[prev_owner][id]=0;
 
-        approve(prev_owner,balance);
-        transferFrom(prev_owner, msg.sender,balance);
+        //increaseAllowance(prev_owner, balance);
+        _transfer(prev_owner, msg.sender,balance);
 
         p.onSale=false;
+        p.owner  =msg.sender;
 
         emit BuyEvent(id,prev_owner,p.owner,p.price);
 
@@ -158,20 +159,20 @@ contract RealEstate is ERC20{
         Property storage  p = prop_list[id];
 
         
-        require(percent!=100,'Call Buy');
-        require(percent>0 && percent<=99,'Rent not in proper range');
+        
+        require(percent>0 && percent<=10,'Rent not in proper range');
 
-        uint tokens = (percent/100) *p.price* 10**18;
+        uint tokens = percent;
 
         require(prop_balance[p.owner][id]>=tokens,'This amount of property cannot be rented');
 
-        uint security  =  (percent/100)*p.price*10**18;
-        security = (security)/60000;
+        uint security  =  percent*(p.price/10);
+        
 
         require(msg.value==security,'Insufficent security');
 
-        approve(p.owner,tokens);
-        transferFrom(p.owner,msg.sender,tokens);
+       // approve(p.owner,tokens);
+        _transfer(p.owner,msg.sender,tokens);
         payable(p.owner).transfer(msg.value);
 
         prop_balance[p.owner][id]-=tokens;
@@ -189,8 +190,8 @@ contract RealEstate is ERC20{
         require(prop_balance[msg.sender][id]>0,'You have not rented this property');
 
         uint balance = prop_balance[msg.sender][id];
-        approve(msg.sender,balance);
-        transferFrom(msg.sender,p.owner, balance);
+       // increaseAllowance(p.owner, balance);
+        _transfer(msg.sender,p.owner, balance);
 
         
         prop_balance[msg.sender][id]=0;
@@ -206,17 +207,17 @@ contract RealEstate is ERC20{
 
         require(prop_balance[msg.sender][id]>0,'Cannot pay rent for a property not rented');
 
-        uint time_elapsed = (block.timestamp - prop_time[msg.sender][id])/60000;  //hour
+        uint time_elapsed = (block.timestamp - prop_time[msg.sender][id]);  //hour
 
         require(time_elapsed>=1,'Pay rent after an hour');
 
-        uint rent = prop_balance[msg.sender][id]/(10**18);
-        rent*=time_elapsed;
+        uint rent_pay = (prop_balance[msg.sender][id])*(p.price/10);
+        rent_pay*=time_elapsed;
 
-        require(rent>0,'Cannot pay 0 rent');
+        require(rent_pay>0,'Cannot pay 0 rent');
 
 
-        require(msg.value==rent,'Incorrect amount of rent');
+        require(msg.value==rent_pay,'Incorrect amount of rent');
 
         payable(p.owner).transfer(msg.value);
 
@@ -231,15 +232,15 @@ contract RealEstate is ERC20{
         Property storage p = prop_list[id];
 
         require(p.owner==msg.sender,'Only owner can throw out a tenant');
-        uint time_elapsed = (block.timestamp - prop_time[tenant][id])/6000;  //hour
+        uint time_elapsed = (block.timestamp - prop_time[tenant][id]);  //hour
 
         require(time_elapsed>=1,'Tenant is not faulty');
 
         require(prop_balance[tenant][id]>0,'This address has not rented the property');
 
         uint balance = prop_balance[tenant][id];
-        approve(tenant,balance);
-        transferFrom(tenant,p.owner,balance);
+       // approve(tenant,balance);
+        _transfer(tenant,p.owner,balance);
 
         prop_balance[tenant][id]=0;
         prop_balance[p.owner][id]+=balance;
